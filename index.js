@@ -10,15 +10,12 @@ const app = express();
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:3001',
-  'https://property-portal-web.vercel.app',
-  // Add other origins if needed (e.g., staging or production domains)
+  'https://property-portal-web.vercel.app/',
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., mobile apps, curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -30,12 +27,23 @@ app.use(cors({
 
 app.use(express.json());
 
+// Initialize database pool
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT || 5432,
+});
+
+// Test database connection
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('Database connection error:', err.stack);
+    return;
+  }
+  console.log('Database connected successfully');
+  release();
 });
 
 const authenticateToken = (req, res, next) => {
@@ -53,6 +61,9 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/register', async (req, res) => {
   const { email, password, role } = req.body;
   try {
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, verified',
@@ -60,6 +71,7 @@ app.post('/api/register', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    console.error('Register error:', error);
     res.status(500).json({ message: 'Registration failed', error: error.message });
   }
 });
@@ -67,20 +79,33 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+    console.log('Login attempt:', { email });
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
+      console.log('User not found:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     const user = result.rows[0];
+    console.log('User found:', { id: user.id, email: user.email });
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log('Password mismatch for:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not defined');
+      return res.status(500).json({ message: 'Server configuration error' });
     }
     const token = jwt.sign({ id: user.id, role: user.role, verified: user.verified }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+    console.log('Login successful:', { email, token });
     res.json({ token, user: { id: user.id, email: user.email, role: user.role, verified: user.verified } });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Login failed', error: error.message });
   }
 });
@@ -93,6 +118,7 @@ app.get('/api/user', authenticateToken, async (req, res) => {
     }
     res.json({ user: result.rows[0] });
   } catch (error) {
+    console.error('Fetch user error:', error);
     res.status(500).json({ message: 'Failed to fetch user', error: error.message });
   }
 });
@@ -109,6 +135,7 @@ app.post('/api/verify-agent/:id', authenticateToken, async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Verify agent error:', error);
     res.status(500).json({ message: 'Failed to verify agent', error: error.message });
   }
 });
@@ -133,6 +160,7 @@ app.get('/api/listings', authenticateToken, async (req, res) => {
     const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (error) {
+    console.error('Fetch listings error:', error);
     res.status(500).json({ message: 'Failed to fetch listings', error: error.message });
   }
 });
@@ -149,6 +177,7 @@ app.post('/api/listings', authenticateToken, async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    console.error('Create listing error:', error);
     res.status(500).json({ message: 'Failed to create listing', error: error.message });
   }
 });
