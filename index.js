@@ -7,9 +7,23 @@ require('dotenv').config();
 
 const app = express();
 
-// Enable CORS for the frontend origin
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3001',
+  'https://property-portal-web.vercel.app',
+  // Add other origins if needed (e.g., staging or production domains)
+];
+
 app.use(cors({
-  origin: 'http://localhost:3001',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., mobile apps, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -18,10 +32,10 @@ app.use(express.json());
 
 const pool = new Pool({
   user: process.env.DB_USER,
-  host: 'localhost',
-  database: 'property_portal',
+  host: process.env.DB_HOST,
+  database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
-  port: 5432,
+  port: process.env.DB_PORT || 5432,
 });
 
 const authenticateToken = (req, res, next) => {
