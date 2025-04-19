@@ -10,7 +10,7 @@ const app = express();
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:3001',
-  'https://property-portal-web.vercel.app/',
+  'https://property-portal-web.vercel.app',
 ];
 
 app.use(cors({
