@@ -51,8 +51,13 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
 
+  if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET is not defined');
+    return res.status(500).json({ message: 'Server configuration error' });
+  }
+
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid token' });
+    if (err) return res.status(403).json({ message: 'Invalid token', error: err.message });
     req.user = user;
     next();
   });
@@ -64,15 +69,18 @@ app.post('/api/register', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
+    console.log('Register attempt:', { email, role });
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('Password hashed successfully');
     const result = await pool.query(
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, verified',
       [email, hashedPassword, role || 'customer']
     );
+    console.log('User registered:', { id: result.rows[0].id, email });
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ message: 'Registration failed', error: error.message });
+    console.error('Register error:', error.stack || error);
+    res.status(500).json({ message: 'Registration failed', error: error.message || 'Unknown error' });
   }
 });
 
@@ -105,21 +113,22 @@ app.post('/api/login', async (req, res) => {
     console.log('Login successful:', { email, token });
     res.json({ token, user: { id: user.id, email: user.email, role: user.role, verified: user.verified } });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Login failed', error: error.message });
+    console.error('Login error:', error.stack || error);
+    res.status(500).json({ message: 'Login failed', error: error.message || 'Unknown error' });
   }
 });
 
 app.get('/api/user', authenticateToken, async (req, res) => {
   try {
+    console.log('Fetch user:', { userId: req.user.id });
     const result = await pool.query('SELECT id, email, role, verified FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.json({ user: result.rows[0] });
   } catch (error) {
-    console.error('Fetch user error:', error);
-    res.status(500).json({ message: 'Failed to fetch user', error: error.message });
+    console.error('Fetch user error:', error.stack || error);
+    res.status(500).json({ message: 'Failed to fetch user', error: error.message || 'Unknown error' });
   }
 });
 
@@ -129,20 +138,23 @@ app.post('/api/verify-agent/:id', authenticateToken, async (req, res) => {
   }
   const { id } = req.params;
   try {
+    console.log('Verify agent attempt:', { agentId: id });
     const result = await pool.query('UPDATE users SET verified = TRUE WHERE id = $1 AND role = $2 RETURNING *', [id, 'agent']);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Agent not found' });
     }
+    console.log('Agent verified:', { id });
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Verify agent error:', error);
-    res.status(500).json({ message: 'Failed to verify agent', error: error.message });
+    console.error('Verify agent error:', error.stack || error);
+    res.status(500).json({ message: 'Failed to verify agent', error: error.message || 'Unknown error' });
   }
 });
 
 app.get('/api/listings', authenticateToken, async (req, res) => {
   try {
     const { price_max, location } = req.query;
+    console.log('Fetch listings:', { price_max, location });
     let query = 'SELECT * FROM listings';
     const values = [];
     const conditions = [];
@@ -160,8 +172,8 @@ app.get('/api/listings', authenticateToken, async (req, res) => {
     const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (error) {
-    console.error('Fetch listings error:', error);
-    res.status(500).json({ message: 'Failed to fetch listings', error: error.message });
+    console.error('Fetch listings error:', error.stack || error);
+    res.status(500).json({ message: 'Failed to fetch listings', error: error.message || 'Unknown error' });
   }
 });
 
@@ -171,14 +183,15 @@ app.post('/api/listings', authenticateToken, async (req, res) => {
   }
   const { title, price, location, description } = req.body;
   try {
+    console.log('Create listing attempt:', { title, price, location });
     const result = await pool.query(
       'INSERT INTO listings (title, price, location, description, agent_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [title, price, location, description || '', req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Create listing error:', error);
-    res.status(500).json({ message: 'Failed to create listing', error: error.message });
+    console.error('Create listing error:', error.stack || error);
+    res.status(500).json({ message: 'Failed to create listing', error: error.message || 'Unknown error' });
   }
 });
 
