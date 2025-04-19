@@ -1,0 +1,17 @@
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  role VARCHAR(50) NOT NULL DEFAULT 'customer',
+  verified BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE listings (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  price DECIMAL NOT NULL,
+  location VARCHAR(255) NOT NULL,
+  description TEXT,
+  agent_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
