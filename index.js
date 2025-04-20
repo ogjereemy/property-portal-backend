@@ -23,21 +23,18 @@ app.use(
         callback(new Error('Not allowed by CORS'));
       }
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allow methods
-    allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   })
 );
 
-// Handle OPTIONS preflight requests explicitly
-app.options('*', cors()); // Ensure CORS headers for all routes
+app.options('*', cors());
 
 app.use(express.json());
 
-// Environment variables
 const { DB_USER, DB_HOST, DB_DATABASE, DB_PASSWORD, DB_PORT, JWT_SECRET } = process.env;
 
-// Database connection
 const pool = new Pool({
   user: DB_USER,
   host: DB_HOST,
@@ -51,7 +48,6 @@ pool.connect()
   .then(() => console.log('Database connected successfully'))
   .catch((err) => console.error('Database connection error:', err));
 
-// Health check
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -62,7 +58,6 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Register
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, role } = req.body;
@@ -78,7 +73,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Login
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -95,7 +89,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Verify agent
 app.post('/api/verify-agent/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -110,7 +103,6 @@ app.post('/api/verify-agent/:id', async (req, res) => {
   }
 });
 
-// Get user
 app.get('/api/user', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -127,7 +119,6 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
-// Create listing
 app.post('/api/listings', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -145,7 +136,6 @@ app.post('/api/listings', async (req, res) => {
   }
 });
 
-// Get listings
 app.get('/api/listings', async (req, res) => {
   try {
     const { price_max, location } = req.query;
