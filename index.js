@@ -3,6 +3,8 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+require('dotenv').config();
+
 
 const app = express();
 
@@ -29,11 +31,12 @@ app.use(
   })
 );
 
-app.options('*', cors());
 
 app.use(express.json());
 
 const { DB_USER, DB_HOST, DB_DATABASE, DB_PASSWORD, DB_PORT, JWT_SECRET } = process.env;
+
+
 
 const pool = new Pool({
   user: DB_USER,
@@ -43,6 +46,7 @@ const pool = new Pool({
   port: DB_PORT,
   ssl: { rejectUnauthorized: false },
 });
+
 
 pool.connect()
   .then(() => console.log('Database connected successfully'))
