@@ -11,13 +11,16 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:3001',
   'https://property-portal-web.vercel.app',
+  'http://localhost:3000',
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
+    console.log('Request origin:', origin);
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.error('CORS error: Origin not allowed:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -27,34 +30,51 @@ app.use(cors({
 
 app.use(express.json());
 
-// Initialize database pool
+// Validate environment variables
+const requiredEnvVars = ['DB_USER', 'DB_HOST', 'DB_DATABASE', 'DB_PASSWORD', 'DB_PORT', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingEnvVars.length > 0) {
+  console.error('Missing environment variables:', missingEnvVars);
+  process.exit(1);
+}
+
+// Initialize database pool with SSL
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT || 5432,
+  ssl: {
+    rejectUnauthorized: false, // Allow self-signed certificates
+  },
 });
 
 // Test database connection
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('Database connection error:', err.stack);
-    return;
+    console.error('Database connection error:', err.message, err.stack);
+    process.exit(1);
   }
   console.log('Database connected successfully');
   release();
+});
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ status: 'OK', database: 'connected' });
+  } catch (error) {
+    console.error('Health check error:', error.message, error.stack);
+    res.status(500).json({ status: 'ERROR', database: 'disconnected', error: error.message });
+  }
 });
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
-
-  if (!process.env.JWT_SECRET) {
-    console.error('JWT_SECRET is not defined');
-    return res.status(500).json({ message: 'Server configuration error' });
-  }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ message: 'Invalid token', error: err.message });
@@ -79,7 +99,7 @@ app.post('/api/register', async (req, res) => {
     console.log('User registered:', { id: result.rows[0].id, email });
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Register error:', error.stack || error);
+    console.error('Register error:', error.message, error.stack);
     res.status(500).json({ message: 'Registration failed', error: error.message || 'Unknown error' });
   }
 });
@@ -103,17 +123,13 @@ app.post('/api/login', async (req, res) => {
       console.log('Password mismatch for:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET is not defined');
-      return res.status(500).json({ message: 'Server configuration error' });
-    }
     const token = jwt.sign({ id: user.id, role: user.role, verified: user.verified }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
     console.log('Login successful:', { email, token });
     res.json({ token, user: { id: user.id, email: user.email, role: user.role, verified: user.verified } });
   } catch (error) {
-    console.error('Login error:', error.stack || error);
+    console.error('Login error:', error.message, error.stack);
     res.status(500).json({ message: 'Login failed', error: error.message || 'Unknown error' });
   }
 });
@@ -127,7 +143,7 @@ app.get('/api/user', authenticateToken, async (req, res) => {
     }
     res.json({ user: result.rows[0] });
   } catch (error) {
-    console.error('Fetch user error:', error.stack || error);
+    console.error('Fetch user error:', error.message, error.stack);
     res.status(500).json({ message: 'Failed to fetch user', error: error.message || 'Unknown error' });
   }
 });
@@ -146,7 +162,7 @@ app.post('/api/verify-agent/:id', authenticateToken, async (req, res) => {
     console.log('Agent verified:', { id });
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Verify agent error:', error.stack || error);
+    console.error('Verify agent error:', error.message, error.stack);
     res.status(500).json({ message: 'Failed to verify agent', error: error.message || 'Unknown error' });
   }
 });
@@ -172,7 +188,7 @@ app.get('/api/listings', authenticateToken, async (req, res) => {
     const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (error) {
-    console.error('Fetch listings error:', error.stack || error);
+    console.error('Fetch listings error:', error.message, error.stack);
     res.status(500).json({ message: 'Failed to fetch listings', error: error.message || 'Unknown error' });
   }
 });
@@ -190,12 +206,12 @@ app.post('/api/listings', authenticateToken, async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Create listing error:', error.stack || error);
+    console.error('Create listing error:', error.message, error.stack);
     res.status(500).json({ message: 'Failed to create listing', error: error.message || 'Unknown error' });
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

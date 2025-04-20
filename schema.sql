@@ -9,9 +9,8 @@ CREATE TABLE users (
 CREATE TABLE listings (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
-  price DECIMAL NOT NULL,
+  price INTEGER NOT NULL,
   location VARCHAR(255) NOT NULL,
   description TEXT,
-  agent_id INTEGER REFERENCES users(id),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  agent_id INTEGER REFERENCES users(id)
 );
