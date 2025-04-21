@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const listingsRouter = require('./routes/listings');
 const communicationsRouter = require('./routes/communications');
 const twilioRouter = require('./routes/twilio');
-const authRouter = require('./routes/user');
+const authRouter = require('./routes/auth');
 
 const app = express();
 
@@ -15,7 +15,7 @@ app.use(bodyParser.urlencoded({ extended: true })); // Parse Twilio's form-urlen
 app.use('/api/listings', listingsRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/twilio-webhook', twilioRouter);
-app.use('/user', authRouter);
+app.use('/api/auth', authRouter);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
