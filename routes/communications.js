@@ -67,30 +67,32 @@ router.post('/communications', authenticateToken, async (req, res) => {
 
     if (type === 'call') {
       try {
-        await client.calls.create({
+        const call = await client.calls.create({
           url: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`,
           to: agentResult.rows[0].phone,
           from: process.env.TWILIO_PHONE_NUMBER,
           statusCallback: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`,
           statusCallbackEvent: ['initiated', 'answered', 'completed']
         });
-        console.log('Twilio call initiated');
+        console.log('Twilio call initiated:', call.sid);
       } catch (twilioErr) {
         console.error('Twilio call error:', twilioErr.message);
-        throw new Error(`Twilio call failed: ${twilioErr.message}`);
+        await db.query('UPDATE communications SET status = $1 WHERE id = $2', ['failed', communication.rows[0].id]);
+        return res.status(502).json({ message: 'Failed to initiate call', details: twilioErr.message });
       }
     } else if (type === 'whatsapp') {
       try {
-        await client.messages.create({
+        const message = await client.messages.create({
           from: `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`,
           to: `whatsapp:${agentResult.rows[0].phone}`,
           body: `Interest in listing ${listingResult.rows[0].title} from ${effectiveEmail}`,
           statusCallback: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`
         });
-        console.log('Twilio WhatsApp message sent');
+        console.log('Twilio WhatsApp message sent:', message.sid);
       } catch (twilioErr) {
         console.error('Twilio WhatsApp error:', twilioErr.message);
-        throw new Error(`Twilio WhatsApp failed: ${twilioErr.message}`);
+        await db.query('UPDATE communications SET status = $1 WHERE id = $2', ['failed', communication.rows[0].id]);
+        return res.status(502).json({ message: 'Failed to send WhatsApp message', details: twilioErr.message });
       }
     } else if (type === 'email') {
       const emailDetails = {
