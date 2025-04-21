@@ -9,7 +9,7 @@ const app = express();
 
 // Middleware
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true })); // Parse Twilio's form-urlencoded payloads
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/listings', listingsRouter);
