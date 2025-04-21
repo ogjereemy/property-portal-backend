@@ -84,7 +84,8 @@ router.post('/communications', authenticateToken, async (req, res) => {
         await client.messages.create({
           from: `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`,
           to: `whatsapp:${agentResult.rows[0].phone}`,
-          body: `Interest in listing ${listingResult.rows[0].title} from ${effectiveEmail}`
+          body: `Interest in listing ${listingResult.rows[0].title} from ${effectiveEmail}`,
+          statusCallback: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`
         });
         console.log('Twilio WhatsApp message sent');
       } catch (twilioErr) {
@@ -92,7 +93,6 @@ router.post('/communications', authenticateToken, async (req, res) => {
         throw new Error(`Twilio WhatsApp failed: ${twilioErr.message}`);
       }
     } else if (type === 'email') {
-      // Log email details instead of sending via SendGrid
       const emailDetails = {
         to: agentResult.rows[0].email,
         from: 'no-reply@propertyportal.com',
@@ -101,7 +101,6 @@ router.post('/communications', authenticateToken, async (req, res) => {
         html: `<p>User ${effectiveEmail} is interested in listing <strong>${listingResult.rows[0].title}</strong>.</p>`
       };
       console.log('Email communication logged:', emailDetails);
-      // Update status to 'sent' for consistency
       await db.query('UPDATE communications SET status = $1 WHERE id = $2', ['sent', communication.rows[0].id]);
     }
 
@@ -139,7 +138,6 @@ router.post('/communications/email', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Agent not found' });
     }
 
-    // Log email details instead of sending via SendGrid
     const emailDetails = {
       to: agentResult.rows[0].email,
       from: 'no-reply@propertyportal.com',
