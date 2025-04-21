@@ -10,23 +10,25 @@ router.post('/twilio-webhook', async (req, res) => {
   const { To, From, Body, CallSid, CallStatus, MessageSid, MessageStatus } = req.body;
   console.log('Twilio webhook received:', req.body);
 
+  if (!Object.keys(req.body).length) {
+    console.error('Empty webhook payload received');
+    return res.status(400).json({ message: 'Empty webhook payload' });
+  }
+
   try {
     if (CallSid && CallStatus) {
-      // Handle call status updates
       const communication = await db.query(
         'UPDATE communications SET status = $1 WHERE virtual_number = $2 AND type = $3 RETURNING *',
         [CallStatus, To, 'call']
       );
       console.log('Call status updated:', communication.rows[0]);
     } else if (MessageSid && MessageStatus) {
-      // Handle WhatsApp/SMS status updates
       const communication = await db.query(
         'UPDATE communications SET status = $1 WHERE virtual_number = $2 AND type = $3 RETURNING *',
         [MessageStatus, To, 'whatsapp']
       );
       console.log('Message status updated:', communication.rows[0]);
     } else if (Body && From && To) {
-      // Handle incoming WhatsApp message
       const user = await db.query('SELECT * FROM users WHERE phone = $1', [From.replace('whatsapp:', '')]);
       if (user.rows.length === 0) {
         console.error('User not found for phone:', From);
@@ -39,7 +41,6 @@ router.post('/twilio-webhook', async (req, res) => {
       );
       console.log('Incoming message recorded:', communication.rows[0]);
 
-      // Respond with TwiML
       const twiml = new twilio.twiml.MessagingResponse();
       twiml.message('Thank you for your message! We will respond soon.');
       res.type('text/xml');

@@ -1,21 +1,23 @@
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const userRoutes = require('./routes/user');
-const communicationsRoutes = require('./routes/communications');
-const listingsRoutes = require('./routes/listings');
-const twilioRoutes = require('./routes/twilio');
-const sendgridRoutes = require('./routes/sendgrid');
+const bodyParser = require('body-parser');
+const listingsRouter = require('./routes/listings');
+const communicationsRouter = require('./routes/communications');
+const twilioRouter = require('./routes/twilio');
+const authRouter = require('./routes/auth');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
-app.use('/api', userRoutes);
-app.use('/api', communicationsRoutes);
-app.use('/api', listingsRoutes);
-app.use('/api', twilioRoutes);
-app.use('/api', sendgridRoutes);
+// Middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true })); // Parse Twilio's form-urlencoded payloads
+
+// Routes
+app.use('/api/listings', listingsRouter);
+app.use('/api/communications', communicationsRouter);
+app.use('/api/twilio-webhook', twilioRouter);
+app.use('/api/auth', authRouter);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
