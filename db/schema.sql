@@ -3,7 +3,7 @@ CREATE TABLE users (
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL,
-  verified BOOLEAN DEFAULT FALSE,
+  verified BOOLEAN DEFAULT false,
   phone VARCHAR(20)
 );
 
@@ -13,18 +13,15 @@ CREATE TABLE listings (
   price INTEGER NOT NULL,
   location VARCHAR(255) NOT NULL,
   description TEXT,
-  agent_id INTEGER REFERENCES users(id)
+  agent_id INTEGER REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE communications (
   id SERIAL PRIMARY KEY,
-  listing_id INTEGER REFERENCES listings(id),
-  user_id INTEGER REFERENCES users(id),
-  broker_id INTEGER REFERENCES users(id),
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
   type VARCHAR(50) NOT NULL,
-  virtual_number VARCHAR(20),
-  virtual_email VARCHAR(255),
   status VARCHAR(50) NOT NULL,
-  message TEXT,
+  virtual_number VARCHAR(20),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
