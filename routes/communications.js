@@ -1,115 +1,124 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const twilio = require('twilio');
-const sgMail = require('@sendgrid/mail');
-const db = require('../db');
-
 const router = express.Router();
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const db = require('../db');
+const twilio = require('twilio');
+const sendgridMail = require('@sendgrid/mail');
+const jwt = require('jsonwebtoken');
 
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ message: 'No token provided' });
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+sendgridMail.setApiKey(process.env.SENDGRID_API_KEY);
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+// Middleware to verify JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Access token required' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid token' });
+    req.user = user;
     next();
-  } catch (err) {
-    res.status(401).json({ message: 'Invalid token' });
-  }
+  });
 };
 
-router.post('/communications', authenticate, async (req, res) => {
+// POST /api/communications
+router.post('/communications', authenticateToken, async (req, res) => {
   const { type, listingId, userEmail } = req.body;
+
+  if (!type || !listingId) {
+    return res.status(400).json({ message: 'Type and listingId are required' });
+  }
+
+  if (!['call', 'whatsapp', 'email'].includes(type)) {
+    return res.status(400).json({ message: 'Invalid communication type' });
+  }
+
   try {
-    const listingResult = await db.query('SELECT * FROM listings WHERE id = $1', [listingId]);
-    const listing = listingResult.rows[0];
-    if (!listing) {
+    const listing = await db.query('SELECT * FROM listings WHERE id = $1', [listingId]);
+    if (listing.rows.length === 0) {
       return res.status(404).json({ message: 'Listing not found' });
     }
 
-    const agentResult = await db.query('SELECT * FROM users WHERE id = $1 AND role = $2', [listing.agent_id, 'agent']);
-    const agent = agentResult.rows[0];
-    if (!agent) {
+    const agent = await db.query('SELECT * FROM users WHERE id = $1 AND role = $2', [listing.rows[0].agent_id, 'agent']);
+    if (agent.rows.length === 0) {
       return res.status(404).json({ message: 'Agent not found' });
     }
 
-    let virtualNumber = null;
-    let virtualEmail = null;
-    let communicationId;
+    const effectiveEmail = userEmail || req.user.email; // Fallback to req.user.email
+    const communication = await db.query(
+      'INSERT INTO communications (user_id, listing_id, type, status, virtual_number, user_email) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [req.user.id, listingId, type, 'initiated', process.env.TWILIO_PHONE_NUMBER, effectiveEmail]
+    );
 
-    if (type === 'call' || type === 'whatsapp') {
-      virtualNumber = process.env.TWILIO_PHONE_NUMBER;
-      const insertResult = await db.query(
-        'INSERT INTO communications (listing_id, user_id, broker_id, type, virtual_number, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [listingId, req.user.id, agent.id, type, virtualNumber, 'delivered']
-      );
-      communicationId = insertResult.rows[0].id;
-
-      await client.messages.create({
-        body: `New ${type} request for listing: ${listing.title} from ${userEmail}`,
+    if (type === 'call') {
+      await client.calls.create({
+        url: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`,
+        to: agent.rows[0].phone,
         from: process.env.TWILIO_PHONE_NUMBER,
-        to: agent.phone
+        statusCallback: `https://property-portal-backend-u31h.onrender.com/api/twilio-webhook`,
+        statusCallbackEvent: ['initiated', 'answered', 'completed']
+      });
+    } else if (type === 'whatsapp') {
+      await client.messages.create({
+        from: `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`,
+        to: `whatsapp:${agent.rows[0].phone}`,
+        body: `Interest in listing ${listing.rows[0].title} from ${effectiveEmail}`
       });
     } else if (type === 'email') {
-      virtualEmail = `agent-${listingId}@propertyportal.com`;
-      const insertResult = await db.query(
-        'INSERT INTO communications (listing_id, user_id, broker_id, type, virtual_email, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [listingId, req.user.id, agent.id, type, virtualEmail, 'delivered']
-      );
-      communicationId = insertResult.rows[0].id;
-
-      await sgMail.send({
-        to: agent.email,
-        from: 'noreply@propertyportal.com',
-        replyTo: virtualEmail,
-        subject: `New inquiry for ${listing.title}`,
-        text: `User ${userEmail} is interested in your listing: ${listing.title}.`
-      });
-    } else {
-      return res.status(400).json({ message: 'Invalid communication type' });
+      const msg = {
+        to: agent.rows[0].email,
+        from: 'no-reply@propertyportal.com',
+        subject: `New Inquiry for ${listing.rows[0].title}`,
+        text: `User ${effectiveEmail} is interested in listing ${listing.rows[0].title}.`,
+        html: `<p>User ${effectiveEmail} is interested in listing <strong>${listing.rows[0].title}</strong>.</p>`
+      };
+      await sendgridMail.send(msg);
     }
 
-    res.json({ virtualNumber, virtualEmail, communicationId });
+    res.json({
+      virtualNumber: process.env.TWILIO_PHONE_NUMBER,
+      communicationId: communication.rows[0].id
+    });
   } catch (err) {
     console.error('Communication error:', err.stack);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-router.post('/communications/email', authenticate, async (req, res) => {
+// POST /api/communications/email
+router.post('/communications/email', authenticateToken, async (req, res) => {
   const { listingId, name, email, message } = req.body;
+
+  if (!listingId || !name || !email || !message) {
+    return res.status(400).json({ message: 'Listing ID, name, email, and message are required' });
+  }
+
   try {
-    const listingResult = await db.query('SELECT * FROM listings WHERE id = $1', [listingId]);
-    const listing = listingResult.rows[0];
-    if (!listing) {
+    const listing = await db.query('SELECT * FROM listings WHERE id = $1', [listingId]);
+    if (listing.rows.length === 0) {
       return res.status(404).json({ message: 'Listing not found' });
     }
 
-    const agentResult = await db.query('SELECT * FROM users WHERE id = $1 AND role = $2', [listing.agent_id, 'agent']);
-    const agent = agentResult.rows[0];
-    if (!agent) {
+    const agent = await db.query('SELECT * FROM users WHERE id = $1 AND role = $2', [listing.rows[0].agent_id, 'agent']);
+    if (agent.rows.length === 0) {
       return res.status(404).json({ message: 'Agent not found' });
     }
 
-    const virtualEmail = `agent-${listingId}@propertyportal.com`;
-    await db.query(
-      'INSERT INTO communications (listing_id, user_id, broker_id, type, virtual_email, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [listingId, req.user.id, agent.id, 'email', virtualEmail, 'delivered']
+    const msg = {
+      to: agent.rows[0].email,
+      from: 'no-reply@propertyportal.com',
+      subject: `New Inquiry for ${listing.rows[0].title}`,
+      text: `From: ${name} (${email})\nMessage: ${message}`,
+      html: `<p>From: ${name} (${email})</p><p>Message: ${message}</p>`
+    };
+    await sendgridMail.send(msg);
+
+    const communication = await db.query(
+      'INSERT INTO communications (user_id, listing_id, type, status, user_email) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.id, listingId, 'email', 'sent', email]
     );
 
-    await sgMail.send({
-      to: agent.email,
-      from: 'noreply@propertyportal.com',
-      replyTo: virtualEmail,
-      subject: `New inquiry for ${listing.title}`,
-      text: `From: ${name} (${email})\nMessage: ${message}\nListing: ${listing.title}`
-    });
-
-    res.status(201).json({ message: 'Email sent' });
+    res.json({ message: 'Email sent', communicationId: communication.rows[0].id });
   } catch (err) {
     console.error('Email error:', err.stack);
     res.status(500).json({ message: 'Server error' });
