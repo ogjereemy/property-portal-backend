@@ -24,4 +24,5 @@ CREATE TABLE communications (
   status VARCHAR(50) NOT NULL,
   virtual_number VARCHAR(20),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  user_email VARCHAR(255)
 );
