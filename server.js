@@ -31,6 +31,7 @@ app.use('/api/listings', listingsRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/twilio-webhook', twilioRouter);
 app.use('/api/auth', authRouter);
+app.use('/auth', authRouter); // Added to support /auth/login
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

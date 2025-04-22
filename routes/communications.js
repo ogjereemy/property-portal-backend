@@ -26,7 +26,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // POST /api/communications
-router.post('/communications', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   const { type, listingId, userEmail } = req.body;
 
   console.log('Request body:', req.body);
@@ -117,7 +117,7 @@ router.post('/communications', authenticateToken, async (req, res) => {
 });
 
 // POST /api/communications/email
-router.post('/communications/email', authenticateToken, async (req, res) => {
+router.post('/email', authenticateToken, async (req, res) => {
   const { listingId, name, email, message } = req.body;
 
   console.log('Email request body:', req.body);
