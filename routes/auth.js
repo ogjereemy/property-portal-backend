@@ -4,6 +4,49 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+// Middleware to verify JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    console.error('No access token provided');
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      console.error('Invalid token:', err.message);
+      return res.status(403).json({ message: 'Invalid token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// GET /api/auth
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const userResult = await db.query('SELECT id, email, role, verified FROM users WHERE id = $1', [req.user.id]);
+    if (userResult.rows.length === 0) {
+      console.error('User not found:', req.user.id);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        verified: user.verified
+      }
+    });
+  } catch (err) {
+    console.error('Fetch user error:', err.stack);
+    res.status(500).json({ message: 'Server error', details: err.message });
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -91,7 +134,7 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '4h' }
     );
 
     res.status(201).json({
