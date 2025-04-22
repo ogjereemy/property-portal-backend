@@ -9,7 +9,7 @@ const authRouter = require('./routes/auth');
 const app = express();
 
 // CORS configuration
-const allowedOrigins = ['http://localhost:3000', 'https://property-portal-web.vercel.app'];
+const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'https://property-portal-web.vercel.app'];
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -30,7 +30,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/api/listings', listingsRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/twilio-webhook', twilioRouter);
-app.use('/api/auth', authRouter); // Ensure /api/auth maps to auth.js
+app.use('/api/auth', authRouter);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
